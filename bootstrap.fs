@@ -70,6 +70,7 @@ swd cell+ dup constant swd-rx
 	['] swd-emit hook-emit ! ;
 
 : init ( -- )
+	0 swd !
 	." The swd buffer address is: " swd hex. cr
 	72MHz swd-init ;
 
