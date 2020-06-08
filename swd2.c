@@ -12,12 +12,12 @@
 #include <time.h>
 #include <sys/endian.h>
 
-static uint32_t addr = 0;
-static stlink_t *handle = NULL;
-struct termios orig[1];
-char input[2*256];
-uint8_t input_r = 0, input_w = 0;
+// An evil collection of global variables follows.
+static uint32_t addr = 0; // the base address of the ring buffers
+static stlink_t *handle = NULL; // handle to the ST/LINK V2
+struct termios orig[1]; // original terminal settings
 
+// Close the the ST/LINK V2 correctly.
 static void
 close_handle(void)
 {
@@ -27,6 +27,7 @@ close_handle(void)
 	}
 }
 
+// Open the first ST/LINK V2 connected via USB
 static stlink_t *
 open_or_die(void)
 {
@@ -40,13 +41,13 @@ open_or_die(void)
 	atexit(close_handle);
 
 	if ( stlink_set_swdclk(handle, STLINK_SWDCLK_4MHZ_DIVISOR) ) {
-		fprintf(stderr, "Failed to set SWD clock rate to 4MHz");
-		abort();
+		fprintf(stderr, "WARNING: Failed to set SWD clock rate to 4MHz.\n");
 	}
 
 	return handle;
 }
 
+//
 static void 
 set_addr_or_die(const char *hex_addr)
 {
