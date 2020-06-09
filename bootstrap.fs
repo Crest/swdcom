@@ -63,15 +63,21 @@ swd cell+ dup constant swd-rx
 : swd-emit? ( -- flag ) swd-tx-w h@ dup 8 rshift swap $ff and 1+ $ff and <> ;
 : swd-emit ( char -- ) begin swd-emit?  until swd-tx swd-tx-w c@ + c! inc-tx-w ;
 
-: swd-init ( -- )
+: swd-console ( -- )
 	['] swd-key? hook-key? !
 	['] swd-key hook-key !
 	['] swd-emit? hook-emit? !
 	['] swd-emit hook-emit ! ;
 
+: serial-console ( -- )
+	['] serial-key? hook-key? !
+	['] serial-key hook-key !
+	['] serial-emit? hook-emit? !
+	['] serial-emit hook-emit ! ;
+
 : init ( -- )
 	0 swd !
 	." The swd buffer address is: " swd hex. cr
-	72MHz swd-init ;
+	72MHz swd-console ;
 
 reset
