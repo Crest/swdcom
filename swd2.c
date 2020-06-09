@@ -1,15 +1,16 @@
-#include <stdbool.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <limits.h>
+#include <signal.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <limits.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <termios.h>
 #include <string.h>
-#include <time.h>
 #include <sys/endian.h>
 #include <sys/stat.h>
+#include <termios.h>
+#include <time.h>
+#include <unistd.h>
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdocumentation-unknown-command"
@@ -394,6 +395,22 @@ stdin_file_type_or_die(void)
 	}
 }
 
+static void
+handler(int sig)
+{
+	(void)sig;
+	quit = true;
+}
+
+static void
+install_signal_handlers(void)
+{
+	struct sigaction action[1] = {{ .sa_handler = handler }};
+	sigemptyset(&action->sa_mask);
+	sigaction(SIGINT, action, NULL);
+	sigaction(SIGTERM, action, NULL);
+}
+
 int
 main(int argc, const char *argv[])
 {
@@ -404,6 +421,7 @@ main(int argc, const char *argv[])
 
 	set_addr_or_die(argv[1]);
 	stdin_file_type_or_die();
+	install_signal_handlers();
 	open_or_die();
 	raw_mode_or_die();
 	stdin_nonblock_or_die();
