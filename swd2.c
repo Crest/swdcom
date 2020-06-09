@@ -1,5 +1,6 @@
 // pkg install -y stlink
 // build with: cc -O0 -g -std=c99 -Wextra -I/usr/local/include -L/usr/local/lib -o swd2 swd2.c -lstlink-shared
+#include <stdbool.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,11 +12,19 @@
 #include <string.h>
 #include <time.h>
 #include <sys/endian.h>
+#include <poll.h>
+#include <sys/stat.h>
 
 // An evil collection of global variables follows.
 static uint32_t addr = 0; // the base address of the ring buffers
 static stlink_t *handle = NULL; // handle to the ST/LINK V2
-struct termios orig[1]; // original terminal settings
+static struct termios orig[1]; // original terminal settings
+static bool quit = false;
+static bool stdin_tty = false;
+static bool stdin_pipe = false;
+static bool stdin_file = false;
+
+static const uint8_t ascii_eot = 0x04;
 
 // Close the the ST/LINK V2 correctly.
 static void
@@ -47,7 +56,7 @@ open_or_die(void)
 	return handle;
 }
 
-//
+// Set the ring buffer base address.
 static void 
 set_addr_or_die(const char *hex_addr)
 {
@@ -60,6 +69,8 @@ set_addr_or_die(const char *hex_addr)
 	addr = (uint32_t)result;
 }
 
+// Read the ring buffer indicies from the microcontroller.
+// All four indicies ({R, W} x {TX, RX}) are stored in a naturally aligned 32 bit word.
 static uint32_t
 read_indicies_or_die(void)
 {
@@ -70,6 +81,7 @@ read_indicies_or_die(void)
 	return le32toh(*((uint32_t*)handle->q_buf));
 }
 
+// Retry interrupted or blocked writes. Abort on I/O error.
 static void
 write_or_die(const void *buffer, size_t len)
 {
@@ -88,6 +100,8 @@ write_or_die(const void *buffer, size_t len)
 	}
 }
 
+// Write a buffer to the microcontroller 8 bit at a time. Abort on I/O error.
+// Using write8_or_die() is slower than write32_or_die().
 static void
 write8_or_die(uint32_t destination, const void *source, size_t length_in_bytes)
 {
@@ -105,6 +119,9 @@ write8_or_die(uint32_t destination, const void *source, size_t length_in_bytes)
 	}
 }
 
+// Write a buffer to the microcontroll 32 bit at at time. Abort on I/O error.
+// Length has to be a multiple of four.
+// Using write32_or_die() is faster than write8_or_die().
 static void
 write32_or_die(uint32_t destination, const void *source, size_t length_in_bytes)
 {
@@ -122,6 +139,8 @@ write32_or_die(uint32_t destination, const void *source, size_t length_in_bytes)
 	}
 }
 
+// Consume everything enqueued by the microcontroller into the ringbuffers.
+// The ring buffers are single producer single writer queues.
 static bool
 consume(uint32_t indicies)
 {
@@ -160,38 +179,77 @@ consume(uint32_t indicies)
 	return true;
 }
 
+// Attempt to read and enqueue as much input as possible from stdin to the microcontroller.
+// The ring buffers are single producer single writer queues.
 static bool
-produce(uint32_t base)
+produce(uint32_t indicies)
 {
-	uint8_t tx_w = (uint8_t)(base >>  0);
-	uint8_t tx_r = (uint8_t)(base >>  8);
+	uint8_t tx_w = (uint8_t)(indicies >> 0);
+	uint8_t tx_r = (uint8_t)(indicies >> 8);
 	uint8_t tx_f = 255 - (tx_w - tx_r);
 
 	uint8_t buffer[256];
 	uint8_t count = 0;
 
 	if ( !tx_f ) {
-		fprintf(stderr, "TX buffer full.\n");
 		return false;
 	}
 	
-	ssize_t result = read(STDIN_FILENO, buffer, tx_f);
-	if ( result < 0 && errno != EINTR && errno != EAGAIN ) {
-		fprintf(stderr, "Failed to read from stdin: %s.\n", strerror(errno));	
+	struct pollfd fds[1] = {{
+		.fd      = STDIN_FILENO,
+		.events  = POLLIN | POLLOUT,
+		.revents = 0
+	}};
+	int ready = 0;
+
+	// We have to poll() the non-blocking pipe to differentiate between
+	// a closed writer and an empty buffer.
+retry:
+	if ( stdin_pipe && (ready = poll(fds, 1, 0)) == -1 ) {
+		if ( errno == EINTR ) {
+			goto retry;
+		}
+		fprintf(stderr, "Failed to poll stdin: %s.\n", strerror(errno));
 		abort();
 	}
-	if ( result > 0 ) {
-		count += (uint8_t)result;
+
+	ssize_t result = read(STDIN_FILENO, buffer, tx_f);
+	if ( result < 0 ) {
+		if ( errno != EINTR && errno != EAGAIN ) {
+			fprintf(stderr, "Failed to read from stdin: %s.\n", strerror(errno));	
+			abort();
+		} else {
+			return false;
+		}
+	}
+	count = (uint8_t)result;
+
+	// On TTYs EOF is signaled with a ASCII end of transmission control character.
+	// Scan for EO
+	if ( stdin_tty ) {
+		const uint8_t *eof = memchr(buffer, ascii_eot, count);
+		if ( eof ) {
+			count = (uint8_t)(eof - buffer); 
+			quit = true;
+		}
+	}
+	if ( stdin_pipe && fds[0].revents & POLLHUP ) {
+		quit = true;
+	}
+	if ( stdin_file && !count ) {
+		quit = true;
 	}
 
-	if ( !count ) {
-		return false;
-	}
-
+	// Optimize the writes:
+	// * The buffer is word aligned
+	// * Start with 8 bit writes if necessary until 32 bit alignment is reached
+	// * Use as many 32 bit where possible
+	// * Finish with 8 bit writes if necessary
+	// * The ring buffer can wrap around
 	bool carry = (tx_w + count) >> 8;
 	uint8_t len1 = carry ? tx_w + count : 0;
 	uint8_t len0 = count - len1;
-	uint8_t byte0 = tx_w % 4 < len0 ? tx_w % 4 : len0; 
+	uint8_t byte0 = (-tx_w & 3) > len0 ? len0 : -tx_w & 3;
 	uint8_t byte1 = (len0 - byte0) % 4;
 	uint8_t byte2 = len1 % 4;
 	uint8_t word0 = len0 - byte0 - byte1;
@@ -238,8 +296,12 @@ restore_stdin(void)
 static void
 raw_mode_or_die(void)
 {
+	if ( !isatty(STDIN_FILENO) ) {
+		return;
+	}
+	stdin_tty = true;
+
 	if ( tcgetattr(STDIN_FILENO, orig) ) {
-		fprintf(stderr, "Failed to copy terminal parameters: %s.\n", strerror(errno));
 		abort();
 	}
 	atexit(restore_stdin);
@@ -306,8 +368,38 @@ debug_indicies(uint32_t indicies)
 	uint8_t rx_u = rx_w - rx_r;
 	uint8_t tx_f = 255 - (tx_w - tx_r);
 
-	fprintf(stderr, "TX: r = %i, w = %i, f = %i RX: r = %i, w = %i, u = %i\n",
+	fprintf(stderr, "\nTX: r = %i, w = %i, f = %i RX: r = %i, w = %i, u = %i\n",
 			tx_r, tx_w, tx_f, rx_r, rx_w, rx_u);
+}
+
+static void
+stdin_file_type_or_die(void)
+{
+	struct stat sb;
+	if ( fstat(STDIN_FILENO, &sb) ) {
+		fprintf(stderr, "Failed to fstat() stdin: %s.\n", strerror(errno));
+		abort();
+	}
+	const mode_t file_type = sb.st_mode & S_IFMT;
+	switch ( file_type ) {
+		case S_IFIFO:
+			stdin_pipe = true;
+			break;
+
+		case S_IFCHR:
+			stdin_tty = isatty(STDIN_FILENO);
+			if ( !stdin_tty ) {
+				fprintf(stderr, "TTYs are the only supported kind of character device.\n");
+				abort();
+			}
+			break;
+		case S_IFREG:
+			stdin_file = true;
+			break;
+		default:
+			fprintf(stderr, "unsupported file type: 0%o.\n", file_type );
+			break;
+	}
 }
 
 int
@@ -319,12 +411,13 @@ main(int argc, const char *argv[])
 	}
 
 	set_addr_or_die(argv[1]);
+	stdin_file_type_or_die();
 	open_or_die();
 	raw_mode_or_die();
 	stdin_nonblock_or_die();
 
 	struct timespec last_active = now_or_die();
-	while ( true ) {
+	while ( !quit ) {
 		uint32_t indicies = read_indicies_or_die();
 		bool rx_active = consume(indicies);
 		bool tx_active = produce(indicies);
