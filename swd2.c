@@ -1,5 +1,3 @@
-// pkg install -y stlink
-// build with: cc -O0 -g -std=c99 -Wextra -I/usr/local/include -L/usr/local/lib -o swd2 swd2.c -lstlink-shared
 #include <stdbool.h>
 #include <errno.h>
 #include <stdio.h>
