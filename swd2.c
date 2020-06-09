@@ -5,7 +5,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <limits.h>
-#include <stlink.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <termios.h>
@@ -13,6 +12,12 @@
 #include <time.h>
 #include <sys/endian.h>
 #include <sys/stat.h>
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdocumentation-unknown-command"
+#pragma clang diagnostic ignored "-Wpadded"
+#include <stlink.h>
+#pragma clang diagnostic pop
 
 // An evil collection of global variables follows.
 static uint32_t addr = 0; // the base address of the ring buffers
@@ -88,8 +93,9 @@ read_indicies_or_die(void)
 static void
 write_or_die(const void *buffer, size_t len)
 {
+	const uint8_t *pos = buffer;
 	while ( len > 0 ) {
-		ssize_t delta = write(STDOUT_FILENO, buffer, len);
+		ssize_t delta = write(STDOUT_FILENO, pos, len);
 		if ( delta < 0 ) {
 			if ( errno == EAGAIN || errno == EINTR ) {
 				continue;
@@ -98,25 +104,25 @@ write_or_die(const void *buffer, size_t len)
 				abort();
 			}
 		}
-		len -= delta;
-		buffer += delta;
+		len -= (size_t)delta;
+		pos += delta;
 	}
 }
 
 // Write a buffer to the microcontroller 8 bit at a time. Abort on I/O error.
 // Using write8_or_die() is slower than write32_or_die().
 static void
-write8_or_die(uint32_t destination, const void *source, size_t length_in_bytes)
+write8_or_die(uint32_t destination, const void *source, uint16_t length_in_bytes)
 {
 	const size_t buffer_size = Q_BUF_LEN;
 	if ( length_in_bytes > buffer_size ) {
-		fprintf(stderr, "Oversized bytewise write failed (length = %zu, max = %zu).\n",
+		fprintf(stderr, "Oversized bytewise write failed (length = %u, max = %zu).\n",
 				length_in_bytes, buffer_size);
 		abort();
 	}
 	memcpy(handle->q_buf, source, length_in_bytes);
 	if ( stlink_write_mem8(handle, destination, length_in_bytes) ) {
-		fprintf(stderr, "Bytewise write failed (destination = 0x%08x, length = %zu).\n",
+		fprintf(stderr, "Bytewise write failed (destination = 0x%08x, length = %u).\n",
 				destination, length_in_bytes);
 		abort();
 	}
@@ -126,17 +132,17 @@ write8_or_die(uint32_t destination, const void *source, size_t length_in_bytes)
 // Length has to be a multiple of four.
 // Using write32_or_die() is faster than write8_or_die().
 static void
-write32_or_die(uint32_t destination, const void *source, size_t length_in_bytes)
+write32_or_die(uint32_t destination, const void *source, uint16_t length_in_bytes)
 {
 	const size_t buffer_size = Q_BUF_LEN;
 	if ( length_in_bytes > buffer_size ) {
-		fprintf(stderr, "Oversized wordwise write failed (length = %zu, max = %zu).\n",
+		fprintf(stderr, "Oversized wordwise write failed (length = %u, max = %zu).\n",
 				length_in_bytes, buffer_size);
 		abort();
 	}
 	memcpy(handle->q_buf, source, length_in_bytes);
 	if ( stlink_write_mem32(handle, destination, length_in_bytes) ) {
-		fprintf(stderr, "Wordwise write failed (destination = 0x%08x, length = %zu).\n",
+		fprintf(stderr, "Wordwise write failed (destination = 0x%08x, length = %u).\n",
 				destination, length_in_bytes);
 		abort();
 	}
@@ -155,15 +161,19 @@ consume(uint32_t indicies)
 		return false;
 	}
 
+	// Optimize reads:
+	// * Use as few commands as possible
+	// * Round down to 32 bit alignment
+	// * Pad to 32 bit alignment
+	// * The ring buffer can wrap around
 	const uint32_t start  = rx_r;
 	const uint32_t off    = start & 3;
 	const uint16_t len    = rx_w > rx_r ? rx_u : (uint8_t)-rx_r;
-	const uint32_t start0 = start & -4;
+	const uint32_t start0 = start & -4u;
 	const uint32_t start1 = 0;
-	const uint16_t len0   = (len + off + 3) & -4;
+	const uint16_t len0   = (uint16_t)(len + off + 3) & -4u;
 	const uint16_t len1   = (rx_u + 3 - len) & -4;
 
-	uint32_t count = 0;
 	if ( len0 ) {
 		stlink_read_mem32(handle, addr + 4 + 256 + start0, len0);
 		write_or_die(handle->q_buf + off, len);
@@ -208,6 +218,9 @@ produce(uint32_t indicies)
 		}
 	}
 	count = (uint8_t)result;
+	if ( !count ) {
+		quit = true;
+	}
 
 	// On TTYs EOF is signaled with a ASCII end of transmission control character.
 	if ( stdin_tty ) {
@@ -217,11 +230,8 @@ produce(uint32_t indicies)
 			quit = true;
 		}
 	}
-	if ( !count ) {
-		quit = true;
-	}
 
-	// Optimize the writes:
+	// Optimize writes:
 	// * The buffer is word aligned
 	// * Start with 8 bit writes if necessary until 32 bit alignment is reached
 	// * Use as many 32 bit where possible
@@ -287,7 +297,7 @@ raw_mode_or_die(void)
 	}
 	atexit(restore_stdin);
 	struct termios raw = *orig;
-	raw.c_lflag &= ~(ECHO | ICANON);
+	raw.c_lflag &= (unsigned)~(ECHO | ICANON);
 	if ( tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) ) {
 		fprintf(stderr, "Failed to put terminal into raw mode: %s.\n", strerror(errno));
 		abort();
@@ -339,9 +349,12 @@ now_or_die(void)
 	return ts;
 }
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-function"
 static void
 debug_indicies(uint32_t indicies)
 {
+#pragma clang diagnostic pop
 	uint8_t tx_w = (uint8_t)(indicies >>  0);
 	uint8_t tx_r = (uint8_t)(indicies >>  8);
 	uint8_t rx_w = (uint8_t)(indicies >> 16);
