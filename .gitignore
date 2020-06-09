@@ -56,3 +56,6 @@ dkms.conf
 
 # Core file
 *.core
+
+# Executable
+swd2
