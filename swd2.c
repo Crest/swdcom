@@ -12,7 +12,6 @@
 #include <string.h>
 #include <time.h>
 #include <sys/endian.h>
-#include <poll.h>
 #include <sys/stat.h>
 
 // An evil collection of global variables follows.
@@ -199,30 +198,7 @@ produce(uint32_t indicies)
 		return false;
 	}
 	
-	struct pollfd fds[1] = {{
-		.fd      = STDIN_FILENO,
-		.events  = POLLIN | POLLOUT,
-		.revents = 0
-	}};
-	int ready = 0;
-
-	// We have to poll() the non-blocking pipe to differentiate between
-	// a closed writer and an empty buffer.
-retry:
-	if ( stdin_pipe && (ready = poll(fds, 1, 0)) == -1 ) {
-		if ( errno == EINTR ) {
-			goto retry;
-		}
-		fprintf(stderr, "Failed to poll stdin: %s.\n", strerror(errno));
-		abort();
-	}
-
-	errno = 0;
 	ssize_t result = read(STDIN_FILENO, buffer, tx_f);
-	if ( errno == EAGAIN || !result ) {
-		fprintf(stderr, "read(stdin) -> %zi, err = %s\n", result, strerror(errno));
-	}
-
 	if ( result < 0 ) {
 		if ( errno != EINTR && errno != EAGAIN ) {
 			fprintf(stderr, "Failed to read from stdin: %s.\n", strerror(errno));	
@@ -234,7 +210,6 @@ retry:
 	count = (uint8_t)result;
 
 	// On TTYs EOF is signaled with a ASCII end of transmission control character.
-	// Scan for EO
 	if ( stdin_tty ) {
 		const uint8_t *eof = memchr(buffer, ascii_eot, count);
 		if ( eof ) {
@@ -242,10 +217,7 @@ retry:
 			quit = true;
 		}
 	}
-	if ( stdin_pipe && fds[0].revents & POLLHUP ) {
-		quit = true;
-	}
-	if ( stdin_file && !count ) {
+	if ( !count ) {
 		quit = true;
 	}
 
