@@ -417,10 +417,7 @@ main(int argc, const char *argv[])
 		bool tx_active = produce(indicies);
 		bool active = rx_active | tx_active;
 		struct timespec now = now_or_die();
-		if ( clock_gettime(CLOCK_UPTIME_FAST, &now) ) {
-			fprintf(stderr, "Failed to read uptime clock: %s.\n", strerror(errno));
-			abort();
-		}
+
 		if ( active ) {
 			last_active = now;
 		} else {
