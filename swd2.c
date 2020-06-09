@@ -19,11 +19,13 @@
 static uint32_t addr = 0; // the base address of the ring buffers
 static stlink_t *handle = NULL; // handle to the ST/LINK V2
 static struct termios orig[1]; // original terminal settings
-static bool quit = false;
-static bool stdin_tty = false;
-static bool stdin_pipe = false;
-static bool stdin_file = false;
 
+static bool quit       = false; // Quit the main loop
+static bool stdin_tty  = false; // Is stdin a TTY?
+static bool stdin_pipe = false; // Is stdin a pipe?
+static bool stdin_file = false; // Is stdin a regular file?
+
+// On TTYs ctrl+d results in a ASCII end of transmission control character.
 static const uint8_t ascii_eot = 0x04;
 
 // Close the the ST/LINK V2 correctly.
@@ -33,10 +35,12 @@ close_handle(void)
 	if ( handle ) {
 		fprintf(stderr, "Closing ST-LINK/V2 handle.\n");
 		stlink_close(handle);
+		handle = NULL;
 	}
 }
 
 // Open the first ST/LINK V2 connected via USB
+// Register an atexit() handler to close it.
 static stlink_t *
 open_or_die(void)
 {
@@ -213,7 +217,12 @@ retry:
 		abort();
 	}
 
+	errno = 0;
 	ssize_t result = read(STDIN_FILENO, buffer, tx_f);
+	if ( errno == EAGAIN || !result ) {
+		fprintf(stderr, "read(stdin) -> %zi, err = %s\n", result, strerror(errno));
+	}
+
 	if ( result < 0 ) {
 		if ( errno != EINTR && errno != EAGAIN ) {
 			fprintf(stderr, "Failed to read from stdin: %s.\n", strerror(errno));	
@@ -293,13 +302,13 @@ restore_stdin(void)
 	tcsetattr(STDIN_FILENO, TCSAFLUSH, orig);
 }
 
+// Put the standard input into raw mode if it's a TTY. 
 static void
 raw_mode_or_die(void)
 {
-	if ( !isatty(STDIN_FILENO) ) {
+	if ( !stdin_tty ) {
 		return;
 	}
-	stdin_tty = true;
 
 	if ( tcgetattr(STDIN_FILENO, orig) ) {
 		abort();
