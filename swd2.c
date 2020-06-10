@@ -366,6 +366,9 @@ now(void)
 	return ts;
 }
 
+// Decode the ring buffer indicies to stderr.
+//
+// Calculates how much is free/used in each direction.
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-function"
 static void
@@ -383,6 +386,10 @@ debug_indicies(uint32_t indicies)
 			tx_r, tx_w, tx_f, rx_r, rx_w, rx_u);
 }
 
+
+// Find out if stdin is a TTY or something else.
+//
+// Refuses files that aren't TTYs, pipes or regular files.
 static void
 stdin_file_type_or_die(void)
 {
@@ -413,6 +420,7 @@ stdin_file_type_or_die(void)
 	}
 }
 
+// Terminate the main loop by setting the quit flag.
 static void
 handler(int sig)
 {
@@ -420,6 +428,8 @@ handler(int sig)
 	quit = true;
 }
 
+// Register signal handlers for SIGINT and SIGTERM.
+// The signal handlers terminate the main loop.
 static void
 install_signal_handlers(void)
 {
