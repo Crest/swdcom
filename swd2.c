@@ -12,6 +12,11 @@
 #include <time.h>
 #include <unistd.h>
 
+// CLOCK_MONOTONIC_FAST is FreeBSD specific. Fall back to CLOCK_MONOTONIC on other systems.
+#ifndef CLOCK_MONOTONIC_FAST
+#define CLOCK_MONOTONIC_FAST CLOCK_MONOTONIC
+#endif
+
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdocumentation-unknown-command"
 #pragma clang diagnostic ignored "-Wpadded"
@@ -277,6 +282,7 @@ produce(uint32_t indicies)
 	return true;
 }
 
+// The atexit(3) callback used by raw_mode_or_die()
 static void
 restore_stdin(void)
 {
@@ -284,6 +290,11 @@ restore_stdin(void)
 }
 
 // Put the standard input into raw mode if it's a TTY. 
+// Restore stdin to its previous mode on exit.
+//
+// TTYs have to be but into raw mode because in canonical
+// mode lines are buffered and the forth system expects
+// unbuffered input.
 static void
 raw_mode_or_die(void)
 {
@@ -303,6 +314,7 @@ raw_mode_or_die(void)
 	}
 }
 
+// Calculate the difference between two timespecs.
 static struct timespec
 elapsed(struct timespec start, struct timespec stop)
 {
@@ -321,6 +333,12 @@ elapsed(struct timespec start, struct timespec stop)
 	}
 }
 
+// Put stdin into non blocking more or die trying.
+//
+// The protocol between STLINK/V2 and target and between
+// the host PC and the STLINK/V2 both assume polling.
+// Blocking on stdin would block transmissions from the
+// target to the host PC as well.
 static void
 stdin_nonblock_or_die(void)
 {
@@ -336,14 +354,14 @@ stdin_nonblock_or_die(void)
 	}
 }
 
+// Retrieve the current clock value
 static struct timespec
-now_or_die(void)
+now(void)
 {
 	struct timespec ts;
-	if ( clock_gettime(CLOCK_UPTIME_FAST, &ts) ) {
-		fprintf(stderr, "Failed to read uptime clock: %s.\n", strerror(errno));
-		abort();
-	}
+
+	// No error handling required because reading valid clocks always succeeds.
+	clock_gettime(CLOCK_MONOTONIC_FAST, &ts);
 
 	return ts;
 }
@@ -426,13 +444,13 @@ main(int argc, const char *argv[])
 	raw_mode_or_die();
 	stdin_nonblock_or_die();
 
-	struct timespec last_active = now_or_die();
+	struct timespec last_active = now();
 	while ( !quit ) {
 		uint32_t indicies = read_indicies_or_die();
 		bool rx_active = consume(indicies);
 		bool tx_active = produce(indicies);
 		bool active = rx_active | tx_active;
-		struct timespec now = now_or_die();
+		struct timespec now = now();
 
 		if ( active ) {
 			last_active = now;
@@ -446,3 +464,5 @@ main(int argc, const char *argv[])
 
 	return 0;
 }
+The Forth Live Explorer is a command-line utility to talk to a micro-controller via a (local or remote) serial port. Its main mode of operation is as interactive terminal, but it can also upload code to an STM32 µC and is tailored in particular for use with Mecrisp Forth.
+
