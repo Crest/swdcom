@@ -356,7 +356,7 @@ stdin_nonblock_or_die(void)
 
 // Retrieve the current clock value
 static struct timespec
-now(void)
+get_time(void)
 {
 	struct timespec ts;
 
@@ -454,13 +454,13 @@ main(int argc, const char *argv[])
 	raw_mode_or_die();
 	stdin_nonblock_or_die();
 
-	struct timespec last_active = now();
+	struct timespec last_active = get_time();
 	while ( !quit ) {
 		uint32_t indicies = read_indicies_or_die();
 		bool rx_active = consume(indicies);
 		bool tx_active = produce(indicies);
 		bool active = rx_active | tx_active;
-		struct timespec now = now();
+		struct timespec now = get_time();
 
 		if ( active ) {
 			last_active = now;
@@ -474,5 +474,3 @@ main(int argc, const char *argv[])
 
 	return 0;
 }
-The Forth Live Explorer is a command-line utility to talk to a micro-controller via a (local or remote) serial port. Its main mode of operation is as interactive terminal, but it can also upload code to an STM32 µC and is tailored in particular for use with Mecrisp Forth.
-
