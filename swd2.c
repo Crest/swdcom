@@ -29,6 +29,7 @@ static stlink_t *handle = NULL; // handle to the ST/LINK V2
 static struct termios orig[1]; // original terminal settings
 
 static bool quit       = false; // Quit the main loop
+static bool reset      = false; // Reset the target
 static bool stdin_tty  = false; // Is stdin a TTY?
 static bool stdin_pipe = false; // Is stdin a pipe?
 static bool stdin_file = false; // Is stdin a regular file?
@@ -41,7 +42,6 @@ static void
 close_handle(void)
 {
 	if ( handle ) {
-		fprintf(stderr, "Closing ST-LINK/V2 handle.\n");
 		stlink_close(handle);
 		handle = NULL;
 	}
@@ -53,8 +53,8 @@ static stlink_t *
 open_or_die(void)
 {
 	enum ugly_loglevel loglevel = UWARN;
-	bool reset = false;
-	handle = stlink_open_usb(loglevel, reset, NULL);
+	bool want_reset = false;
+	handle = stlink_open_usb(loglevel, want_reset, NULL);
 	if ( !handle ) {
 		fprintf(stderr, "Failed to open the debugger.\n");
 		abort();
@@ -422,7 +422,7 @@ stdin_file_type_or_die(void)
 
 // Terminate the main loop by setting the quit flag.
 static void
-handler(int sig)
+handler_term(int sig)
 {
 	(void)sig;
 	quit = true;
@@ -430,29 +430,68 @@ handler(int sig)
 
 // Register signal handlers for SIGINT and SIGTERM.
 // The signal handlers terminate the main loop.
+// Terminate the main loop by setting the quit flag.
+static void
+handler_int(int sig)
+{
+	(void)sig;
+	reset = true;
+}
+
+// Register signal handlers for SIGINT and SIGTERM.
+// The signal handlers terminate the main loop.
 static void
 install_signal_handlers(void)
 {
-	struct sigaction action[1] = {{ .sa_handler = handler }};
+	struct sigaction action[1] = {{ .sa_handler = handler_int }};
 	sigemptyset(&action->sa_mask);
 	sigaction(SIGINT, action, NULL);
+	action->sa_handler = handler_term;
 	sigaction(SIGTERM, action, NULL);
 }
 
 int
 main(int argc, const char *argv[])
 {
-	if ( argc != 2 ) {
-		fprintf(stderr, "usage: %s <base-addr>\n", argv[0]);
-		return 1;
+	// We need to know the base address of the ring buffer pair
+	// on the target.
+	//
+	// Allow the user to skip automatic detection by providing the address.
+	switch ( argc ) {
+		case 1:
+			break;
+		case 2:
+			set_addr_or_die(argv[1]);
+			break;
+		default:
+			fprintf(stderr, "usage: %s [<base-addr>]\n", argv[0]);
+			return 64;
 	}
 
-	set_addr_or_die(argv[1]);
+	// Required setup code. Abort on all errors.
 	stdin_file_type_or_die();
 	install_signal_handlers();
 	open_or_die();
 	raw_mode_or_die();
 	stdin_nonblock_or_die();
+
+	// Halt the target to read the base address from R11.
+	if ( !addr ) {
+		if ( stlink_force_debug(handle) ) {
+			fprintf(stderr, "Failed to halt the target.\n");
+			abort();
+		}
+		struct stlink_reg regs[1];
+		if ( stlink_read_reg(handle, 11, regs) ) {
+			fprintf(stderr, "Failed to registers.\n");
+			abort();
+		}
+		if ( stlink_run(handle) ) {
+			fprintf(stderr, "Failed to resume the target.\n");
+			abort();
+		}
+		addr = regs->r[11];
+	}
 
 	struct timespec last_active = get_time();
 	while ( !quit ) {
@@ -462,6 +501,20 @@ main(int argc, const char *argv[])
 		bool active = rx_active | tx_active;
 		struct timespec now = get_time();
 
+		if ( reset ) {
+			if ( stlink_reset(handle) ) {
+				fprintf(stderr, "Failed to reset target.\n");
+				abort();
+			}
+			if ( stlink_run(handle) ) {
+				fprintf(stderr, "Failed to resume target.\n");
+				abort();
+			}
+			fprintf(stderr, "\nRESET\n");
+			reset = false;
+		}
+
+		// Reduce polling rate after a period of inactivty saving CPU cycles and power.
 		if ( active ) {
 			last_active = now;
 		} else {
