@@ -6,7 +6,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/endian.h>
+#include <time.h>
+#include <endian.h>
+#include <poll.h>
 #include <sys/stat.h>
 #include <termios.h>
 #include <time.h>
@@ -14,7 +16,7 @@
 
 // CLOCK_MONOTONIC_FAST is FreeBSD specific. Fall back to CLOCK_MONOTONIC on other systems.
 #ifndef CLOCK_MONOTONIC_FAST
-#define CLOCK_MONOTONIC_FAST CLOCK_MONOTONIC
+#define CLOCK_MONOTONIC_FAST CLOCK_MONOTONIC_COARSE
 #endif
 
 #pragma clang diagnostic push

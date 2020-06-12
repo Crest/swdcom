@@ -1,15 +1,12 @@
-CC?=clang
-CSTD=c99
-WARN=-Weverything # Excessive
+CC=gcc
 
-CFLAGS+=-std=$(CSTD)
-CFLAGS+=$(WARN)
+CFLAGS+=-O0 -g
 CFLAGS+=-I/usr/local/include
 CFLAGS+=-L/usr/local/lib
-LDFLAGS+=-lstlink-shared
+LDFLAGS+=-lstlink
 
 swd2: swd2.c
-	$(CC) $(CFLAGS) -o $(.TARGET) $(.ALLSRC) $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
 
 .PHONY: clean
 clean:
