@@ -8,10 +8,8 @@
 #include <string.h>
 #include <time.h>
 #include <endian.h>
-#include <poll.h>
 #include <sys/stat.h>
 #include <termios.h>
-#include <time.h>
 #include <unistd.h>
 
 // CLOCK_MONOTONIC_FAST is FreeBSD specific. Fall back to CLOCK_MONOTONIC on other systems.
