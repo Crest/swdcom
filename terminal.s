@@ -70,7 +70,7 @@ uart_init:            @ Hijack the usart_init symbol to minimize code changes
    ldr r11, =SWD_Base @ Load the base address into R11. This makes the code
                       @ slightly fast and allows the host PC to autodiscover
 		      @ the buffer address.
-   eor r0, r0         @ Initialize all four indices to zero.
+   eors r0, r0         @ Initialize all four indices to zero.
    str r0, [r11]
 
    bx lr
@@ -102,7 +102,7 @@ serial_qemit:
    dup
    ldrb r0, [r11, 2] @ Load TX write index
    ldrb r1, [r11, 3] @ Load TX read index
-   add r0, 1         @ Check if RX write index + 1 == RX read index
+   adds r0, 1        @ Check if RX write index + 1 == RX read index
    and r0, 255
    cmp r0, r1
    ite eq            
@@ -122,10 +122,10 @@ serial_key:
    cmp r0, r1          @ Wait while RX read == RX write
    beq 1b
    
-   add r1, r0, 4       @ The next byte is at R11 + 4 + RX read
+   adds r1, r0, 4      @ The next byte is at R11 + 4 + RX read
    ldrb tos, [r1, r11]
 
-   add r0, 1           @ Advance the read index one byte
+   adds r0, 1          @ Advance the read index one byte
    strb r0, [r11, 1]
 
    bx lr
@@ -135,7 +135,7 @@ serial_key:
 @ -----------------------------------------------------------------------------
 serial_emit:
    ldrb r0, [r11, 2]   @ Cache TX write index
-   add r1, r0, 1       @ Increment TX write index % 256
+   adds r1, r0, 1      @ Increment TX write index % 256
    and r1, 255
 1: ldrb r2, [r11, 3]   @ Load TX read index
    cmp r1, r2          @ Wait while TX write + 1 == TX read
