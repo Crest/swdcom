@@ -20,8 +20,8 @@
 
 @ Instead of the normal USART these terminal words use a pair of ring buffers
 @ in SRAM. The PC (ab)uses the STLINK/V2 as remote memory access interface.
-@ All four indicies are stores in a single 32 bit word allowing the host
-@ to poll them all with a single 32 bit memory read. Updates to the indicies
+@ All four indices are stores in a single 32 bit word allowing the host
+@ to poll them all with a single 32 bit memory read. Updates to the indices
 @ use 8 bit writes.
 @ The ring buffers are used as single producer, single consumer queues to
 @ decouple bursty producers from their consumer.
@@ -70,7 +70,7 @@ uart_init:            @ Hijack the usart_init symbol to minimize code changes
    ldr r11, =SWD_Base @ Load the base address into R11. This makes the code
                       @ slightly fast and allows the host PC to autodiscover
 		      @ the buffer address.
-   eor r0, r0         @ Initialize all four indicies to zero.
+   eor r0, r0         @ Initialize all four indices to zero.
    str r0, [r11]
 
    bx lr
@@ -85,7 +85,7 @@ serial_qkey:         @ Hijack the serial_qkey symbol to minimize code changes
    dup
    ldrb r0, [r11]    @ Load RX write index
    ldrb r1, [r11, 1] @ Load RX read index
-   cmp r0, r1        @ Compare the RX read and write indicies for equality
+   cmp r0, r1        @ Compare the RX read and write indices for equality
    ite eq 
    eoreq tos, tos    @ Buffer empty =>  0   
    ornne tos, tos    @ Buffer used  => -1
