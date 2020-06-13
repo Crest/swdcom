@@ -68,9 +68,9 @@
 @ -----------------------------------------------------------------------------
 uart_init:            @ Hijack the usart_init symbol to minimize code changes
    ldr r11, =SWD_Base @ Load the base address into R11. This makes the code
-                      @ slightly fast and allows the host PC to autodiscover
+                      @ slightly faster and allows the host PC to autodiscover
 		      @ the buffer address.
-   eors r0, r0         @ Initialize all four indices to zero.
+   eors r0, r0        @ Initialize all four indices to zero.
    str r0, [r11]
 
    bx lr
