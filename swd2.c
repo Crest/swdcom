@@ -425,7 +425,6 @@ stdin_file_type_or_die(void)
 			break;
 		default:
 			die("unsupported file type: 0%o.", file_type);
-			break;
 	}
 }
 
