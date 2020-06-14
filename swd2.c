@@ -12,9 +12,15 @@
 #include <time.h>
 #include <unistd.h>
 
-// CLOCK_MONOTONIC_FAST is FreeBSD specific. Fall back to CLOCK_MONOTONIC on other systems.
+// CLOCK_MONOTONIC_FAST is FreeBSD specific.
+// Fall back to CLOCK_MONOTONIC_COARSE if available.
+// If neither is available use CLOCK_MONOTONIC which will likely be implemented as syscall.
 #ifndef CLOCK_MONOTONIC_FAST
+#ifdef CLOCK_MONOTONIC_COARSE
+#define CLOCK_MONOTONIC_FAST CLOCK_MONOTONIC_COARSE
+#else
 #define CLOCK_MONOTONIC_FAST CLOCK_MONOTONIC
+#endif
 #endif
 
 #pragma clang diagnostic push
