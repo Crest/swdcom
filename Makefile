@@ -1,6 +1,7 @@
 CSTD=c99
 WARN=-Wall -Wextra -Wno-unknown-pragmas
 
+CFLAGS?=-O2 -pipe
 CFLAGS+=-std=$(CSTD)
 CFLAGS+=$(WARN)
 CFLAGS+=-I/usr/local/include

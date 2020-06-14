@@ -382,7 +382,7 @@ get_time(void)
 // Calculates how much is free/used in each direction.
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-function"
-static void
+static void __attribute__((unused))
 debug_indicies(uint32_t indicies)
 {
 #pragma clang diagnostic pop
