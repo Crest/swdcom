@@ -85,10 +85,11 @@ serial_qkey:         @ Hijack the serial_qkey symbol to minimize code changes
    dup
    ldrb r0, [r11]    @ Load RX write index
    ldrb r1, [r11, 1] @ Load RX read index
-   cmp r0, r1        @ Compare the RX read and write indices for equality
-   ite eq 
-   eoreq tos, tos    @ Buffer empty =>  0   
-   ornne tos, tos    @ Buffer used  => -1
+
+   movs tos, 0	     @ Assume that the RX buffer is empty (read == write)
+   cmp r0, r1        @ Test the assumption
+   it ne             @ Change from 0 to -1 if the assumption was incorrect 
+   subne tos, 1
 
    pop {pc}
 
@@ -104,10 +105,10 @@ serial_qemit:
    ldrb r1, [r11, 3] @ Load TX read index
    adds r0, 1        @ Check if RX write index + 1 == RX read index
    and r0, 255
-   cmp r0, r1
-   ite eq            
-   eoreq tos, tos    @ Buffer full     =>  0
-   ornne tos, tos    @ Space available => -1
+   movs tos, 0       @ Assume that the TX buffer is full (write + 1 == RX)
+   cmp r0, r1        @ Test the assumption
+   it ne             @ Change from 0 to -1 if the assumption was incorrect
+   subne tos, 1
 
    pop {pc}
 
