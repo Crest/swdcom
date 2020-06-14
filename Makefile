@@ -1,6 +1,5 @@
-CC?=clang
 CSTD=c99
-WARN=-Weverything # Excessive
+WARN=-Wall -Wextra -Wno-unknown-pragmas
 
 CFLAGS+=-std=$(CSTD)
 CFLAGS+=$(WARN)
