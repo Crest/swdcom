@@ -102,7 +102,7 @@ serial_qkey:         @ Hijack the serial_qkey symbol to minimize code changes
 @ -----------------------------------------------------------------------------
   Wortbirne Flag_visible, "swd-emit?" @ ( -- ? )
 @ -----------------------------------------------------------------------------
-serial_qemit:
+serial_qemit:        @ Hijack the serial_qemit symbol to minimize code changes
    push {lr}         @ Yield the CPU
    bl pause
 
@@ -121,7 +121,7 @@ serial_qemit:
 @ -----------------------------------------------------------------------------
   Wortbirne Flag_visible, "swd-key" @ ( -- c )
 @ -----------------------------------------------------------------------------
-serial_key:
+serial_key:            @ Hijack the serial_key symbol to minimize code changes
    dup
 
    ldrb r0, [r11, 1]   @ Cache RX read index
@@ -140,7 +140,7 @@ serial_key:
 @ -----------------------------------------------------------------------------
   Wortbirne Flag_visible, "swd-emit" @ ( c -- )
 @ -----------------------------------------------------------------------------
-serial_emit:
+serial_emit:           @ Hijack the serial_emit symbol to minimize code changes
    ldrb r0, [r11, 2]   @ Cache TX write index
    adds r1, r0, 1      @ Increment TX write index % 256
    and r1, 255
