@@ -9,6 +9,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/timespec.h>
+#include <sys/types.h>
 #include <termios.h>
 #include <time.h>
 #include <unistd.h>
