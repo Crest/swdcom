@@ -1,6 +1,7 @@
 @ swdcom terminal functions
 
-@ Copyright (c) 2020, Jan Bramkamp
+@ Copyright (c) 2020, Jan Bramkamp <crest+swdcom@rlwinm.de>
+@ Copyright (c) 2020, Robert Clausecker <fuz@fuz.su>
 @ All rights reserved.
 @ 
 @ Redistribution and use in source and binary forms, with or without
@@ -73,12 +74,12 @@
   Wortbirne Flag_visible, "swd-init"
 @ -----------------------------------------------------------------------------
 uart_init:            @ Hijack the usart_init symbol to minimize code changes
-   ldr r11, =SWD_Base @ Load the base address into R11. This makes the code
+   ldr r1, =SWD_Base  @ SWD buffer base address
+   movs r0, 0         @ Initialize all four indices to zero.
+   str r0, [r1]
+   mov r11, r1        @ Load the base address into R11. This makes the code
                       @ slightly faster and allows the host PC to autodiscover
 		      @ the buffer address.
-   eors r0, r0        @ Initialize all four indices to zero.
-   str r0, [r11]
-
    bx lr
 
 @ -----------------------------------------------------------------------------
@@ -89,8 +90,9 @@ serial_qkey:         @ Hijack the serial_qkey symbol to minimize code changes
    bl pause
 
    dup
-   ldrb r0, [r11]    @ Load RX write index
-   ldrb r1, [r11, 1] @ Load RX read index
+   mov r2, r11       @ Load SWD buffer base address into a low register
+   ldrb r0, [r2]     @ Load RX write index
+   ldrb r1, [r2, 1]  @ Load RX read index
 
    movs tos, 0	     @ Assume that the RX buffer is empty (read == write)
    cmp r0, r1        @ Test the assumption
@@ -107,10 +109,11 @@ serial_qemit:        @ Hijack the serial_qemit symbol to minimize code changes
    bl pause
 
    dup
-   ldrb r0, [r11, 2] @ Load TX write index
-   ldrb r1, [r11, 3] @ Load TX read index
+   mov r2, r11       @ Load SWD buffer base address into a low register
+   ldrb r0, [r2, 2]  @ Load TX write index
+   ldrb r1, [r2, 3]  @ Load TX read index
    adds r0, 1        @ Check if RX write index + 1 == RX read index
-   and r0, 255
+   uxtb r0, r0       @ clear possible carry
    movs tos, 0       @ Assume that the TX buffer is full (write + 1 == RX)
    cmp r0, r1        @ Test the assumption
    it ne             @ Change from 0 to -1 if the assumption was incorrect
@@ -124,16 +127,17 @@ serial_qemit:        @ Hijack the serial_qemit symbol to minimize code changes
 serial_key:            @ Hijack the serial_key symbol to minimize code changes
    dup
 
-   ldrb r0, [r11, 1]   @ Cache RX read index
-1: ldrb r1, [r11, 0]   @ Load RX write index
+   mov r2, r11         @ Load SWD buffer base address into a low register
+   ldrb r0, [r2, 1]    @ Cache RX read index
+1: ldrb r1, [r2, 0]    @ Load RX write index
    cmp r0, r1          @ Wait while RX read == RX write
    beq 1b
    
    adds r1, r0, 4      @ The next byte is at R11 + 4 + RX read
-   ldrb tos, [r1, r11]
+   ldrb tos, [r1, r2]  @ Load the byte that was written
 
    adds r0, 1          @ Advance the read index one byte
-   strb r0, [r11, 1]
+   strb r0, [r2, 1]    @ And write it to the ring buffer
 
    bx lr
       
@@ -141,17 +145,18 @@ serial_key:            @ Hijack the serial_key symbol to minimize code changes
   Wortbirne Flag_visible, "swd-emit" @ ( c -- )
 @ -----------------------------------------------------------------------------
 serial_emit:           @ Hijack the serial_emit symbol to minimize code changes
-   ldrb r0, [r11, 2]   @ Cache TX write index
+   mov r3, r11         @ Load SWD buffer base address into a low register
+   ldrb r0, [r3, 2]    @ Cache TX write index
    adds r1, r0, 1      @ Increment TX write index % 256
-   and r1, 255
-1: ldrb r2, [r11, 3]   @ Load TX read index
+   uxtb r1, r1
+1: ldrb r2, [r3, 3]    @ Load TX read index
    cmp r1, r2          @ Wait while TX write + 1 == TX read
    beq 1b
 
    add r0, 256+4       @ Store the next byte at R11 + 4 + 256 + TX write
-   strb tos, [r0, r11]
+   strb tos, [r0, r3]
 
-   strb r1, [r11, 2]
+   strb r1, [r3, 2]
    
    drop
    bx lr
