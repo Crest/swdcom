@@ -79,7 +79,7 @@ uart_init:            @ Hijack the usart_init symbol to minimize code changes
    str r0, [r1]
    mov r11, r1        @ Load the base address into R11. This makes the code
                       @ slightly faster and allows the host PC to autodiscover
-		      @ the buffer address.
+                      @ the buffer address.
    bx lr
 
 @ -----------------------------------------------------------------------------
@@ -94,7 +94,7 @@ serial_qkey:         @ Hijack the serial_qkey symbol to minimize code changes
    ldrb r0, [r2]     @ Load RX write index
    ldrb r1, [r2, 1]  @ Load RX read index
 
-   movs tos, 0	     @ Assume that the RX buffer is empty (read == write)
+   movs tos, 0       @ Assume that the RX buffer is empty (read == write)
    cmp r0, r1        @ Test the assumption
    it ne             @ Change from 0 to -1 if the assumption was incorrect 
    subne tos, 1
