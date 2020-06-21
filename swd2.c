@@ -76,17 +76,13 @@ close_handle(void)
 static stlink_t *
 open_or_die(void)
 {
-	enum ugly_loglevel loglevel = UWARN;
+	enum ugly_loglevel loglevel = UERROR;
 	bool want_reset = false;
-	handle = stlink_open_usb(loglevel, want_reset, NULL);
+	handle = stlink_open_usb(loglevel, want_reset, NULL, STLINK_SWDCLK_4MHZ_DIVISOR);
 	if ( !handle ) {
 		die("Failed to open the debugger.");
 	}
 	atexit(close_handle);
-
-	if ( stlink_set_swdclk(handle, STLINK_SWDCLK_4MHZ_DIVISOR) ) {
-		fprintf(stderr, "WARNING: Failed to set SWD clock rate to 4MHz.\n");
-	}
 
 	return handle;
 }
