@@ -434,9 +434,7 @@ handler_term(int sig)
 	quit = true;
 }
 
-// Register signal handlers for SIGINT and SIGTERM.
-// The signal handlers terminate the main loop.
-// Terminate the main loop by setting the quit flag.
+// Schedule the target to be reset.
 static void
 handler_int(int sig)
 {
