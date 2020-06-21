@@ -15,4 +15,4 @@ swd2: swd2.c
 
 .PHONY: clean
 clean:
-        rm -f swd2
+	rm -f swd2
