@@ -1,3 +1,5 @@
+#define _XOPEN_SOURCE 500
+
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -8,7 +10,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <sys/timespec.h>
 #include <sys/types.h>
 #include <termios.h>
 #include <time.h>
