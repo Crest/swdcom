@@ -1,6 +1,6 @@
 compile-to-flash
 
-here 256 2* cell+ buffer: swd 0 swd !
+here 256 2* cell+ buffer: swd
 swd 0 + constant swd-rx-w
 swd 1 + constant swd-rx-r
 swd 2 + constant swd-tx-w
@@ -8,7 +8,6 @@ swd 3 + constant swd-tx-r
 swd cell+ dup constant swd-rx
 256 + constant swd-tx
 
-: b+! dup b@ rot + swap b! [inlined] ;
 : b-inc ( c-addr -- ) 1 swap b+! [inlined] ;
 : inc-rx-w ( -- ) swd-rx-w b-inc ;
 : inc-rx-r ( -- ) swd-rx-r b-inc ;
@@ -41,6 +40,7 @@ swd cell+ dup constant swd-rx
 : init ( -- )
   init
   swd-init
+  ." The swd buffer address is: " swd h.8 cr
   swd-console
 ;
 
