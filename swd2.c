@@ -12,7 +12,6 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <termios.h>
-#include <time.h>
 #include <unistd.h>
 
 // CLOCK_MONOTONIC_FAST is FreeBSD specific.
