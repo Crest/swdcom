@@ -11,8 +11,8 @@ CFLAGS+=$(shell pkg-config --cflags libusb-1.0)
 LDFLAGS+=-lstlink
 
 swd2: swd2.c
-        $(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
 
 .PHONY: clean
 clean:
-        rm -f swd2
+	rm -f swd2
