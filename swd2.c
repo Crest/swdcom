@@ -1,26 +1,28 @@
+#define _XOPEN_SOURCE 500
+
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <signal.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
-
-#if __linux__
-#include <endian.h>
-#else
-#include <sys/endian.h>
-#endif
-
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <termios.h>
 #include <unistd.h>
 
-// CLOCK_MONOTONIC_FAST is FreeBSD specific. Fall back to CLOCK_MONOTONIC on other systems.
-#if __linux__
+// CLOCK_MONOTONIC_FAST is FreeBSD specific.
+// Fall back to CLOCK_MONOTONIC_COARSE if available.
+// If neither is available use CLOCK_MONOTONIC which will likely be implemented as syscall.
+#ifndef CLOCK_MONOTONIC_FAST
+#ifdef CLOCK_MONOTONIC_COARSE
 #define CLOCK_MONOTONIC_FAST CLOCK_MONOTONIC_COARSE
+#else
+#define CLOCK_MONOTONIC_FAST CLOCK_MONOTONIC
+#endif
 #endif
 
 #pragma clang diagnostic push
@@ -43,6 +45,22 @@ static bool stdin_file = false; // Is stdin a regular file?
 // On TTYs ctrl+d results in a ASCII end of transmission control character.
 static const uint8_t ascii_eot = 0x04;
 
+static void
+__attribute__((noreturn))
+__attribute__((format(printf, 1, 2)))
+die(const char *fmt, ...)
+{
+	va_list ap;
+	va_start(ap, fmt);
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wformat-nonliteral"
+	vfprintf(stderr, fmt, ap);
+#pragma clang diagnostic pop
+	fputc('\n', stderr);
+	exit(1);
+	va_end(ap);
+}
+
 // Close the the ST/LINK V2 correctly.
 static void
 close_handle(void)
@@ -58,18 +76,13 @@ close_handle(void)
 static stlink_t *
 open_or_die(void)
 {
-	enum ugly_loglevel loglevel = UWARN;
+	enum ugly_loglevel loglevel = UERROR;
 	bool want_reset = false;
-	handle = stlink_open_usb(loglevel, want_reset, NULL);
+	handle = stlink_open_usb(loglevel, want_reset, NULL, STLINK_SWDCLK_4MHZ_DIVISOR);
 	if ( !handle ) {
-		fprintf(stderr, "Failed to open the debugger.\n");
-		abort();
+		die("Failed to open the debugger.");
 	}
 	atexit(close_handle);
-
-	if ( stlink_set_swdclk(handle, STLINK_SWDCLK_4MHZ_DIVISOR) ) {
-		fprintf(stderr, "WARNING: Failed to set SWD clock rate to 4MHz.\n");
-	}
 
 	return handle;
 }
@@ -81,8 +94,7 @@ set_addr_or_die(const char *hex_addr)
 	errno = 0;
 	long result = strtol(hex_addr, NULL, 16);
 	if ( errno ) {
-		fprintf(stderr, "Failed to convert base address: %s.\n", strerror(errno));
-		abort();
+		die("Failed to convert base address: %s.", strerror(errno));
 	}
 	addr = (uint32_t)result;
 }
@@ -93,10 +105,12 @@ static uint32_t
 read_indicies_or_die(void)
 {
 	if ( stlink_read_mem32(handle, addr, 4) ) {
-		fprintf(stderr, "Failed to read the ringbuffer indicies.\n");
-		abort();
+		die("Failed to read the ringbuffer indicies.");
 	}
-	return le32toh(*((uint32_t*)handle->q_buf));
+	return   ((uint32_t)handle->q_buf[0]) |
+		(((uint32_t)handle->q_buf[1]) <<  8) |
+		(((uint32_t)handle->q_buf[2]) << 16) |
+		(((uint32_t)handle->q_buf[3]) << 24);
 }
 
 // Retry interrupted or blocked writes. Abort on I/O error.
@@ -110,8 +124,7 @@ write_or_die(const void *buffer, size_t len)
 			if ( errno == EAGAIN || errno == EINTR ) {
 				continue;
 			} else {
-				fprintf(stderr, "Failed to write to stdout.\n");
-				abort();
+				die("Failed to write to stdout.");
 			}
 		}
 		len -= (size_t)delta;
@@ -126,15 +139,13 @@ write8_or_die(uint32_t destination, const void *source, uint16_t length_in_bytes
 {
 	const size_t buffer_size = Q_BUF_LEN;
 	if ( length_in_bytes > buffer_size ) {
-		fprintf(stderr, "Oversized bytewise write failed (length = %u, max = %zu).\n",
+		die("Oversized bytewise write failed (length = %u, max = %zu).",
 				length_in_bytes, buffer_size);
-		abort();
 	}
 	memcpy(handle->q_buf, source, length_in_bytes);
 	if ( stlink_write_mem8(handle, destination, length_in_bytes) ) {
-		fprintf(stderr, "Bytewise write failed (destination = 0x%08x, length = %u).\n",
+		die("Bytewise write failed (destination = 0x%08x, length = %u).",
 				destination, length_in_bytes);
-		abort();
 	}
 }
 
@@ -146,15 +157,13 @@ write32_or_die(uint32_t destination, const void *source, uint16_t length_in_byte
 {
 	const size_t buffer_size = Q_BUF_LEN;
 	if ( length_in_bytes > buffer_size ) {
-		fprintf(stderr, "Oversized wordwise write failed (length = %u, max = %zu).\n",
+		die("Oversized wordwise write failed (length = %u, max = %zu).",
 				length_in_bytes, buffer_size);
-		abort();
 	}
 	memcpy(handle->q_buf, source, length_in_bytes);
 	if ( stlink_write_mem32(handle, destination, length_in_bytes) ) {
-		fprintf(stderr, "Wordwise write failed (destination = 0x%08x, length = %u).\n",
+		die("Wordwise write failed (destination = 0x%08x, length = %u).",
 				destination, length_in_bytes);
-		abort();
 	}
 }
 
@@ -195,8 +204,7 @@ consume(uint32_t indicies)
 
 	handle->q_buf[0] = rx_w;
 	if ( stlink_write_mem8(handle, addr + 3, 1) ) {
-		fprintf(stderr, "Failed to advance RX read index.\n");
-		abort();
+		die("Failed to advance RX read index.");
 	}
 
 	return true;
@@ -221,8 +229,7 @@ produce(uint32_t indicies)
 	ssize_t result = read(STDIN_FILENO, buffer, tx_f);
 	if ( result < 0 ) {
 		if ( errno != EINTR && errno != EAGAIN ) {
-			fprintf(stderr, "Failed to read from stdin: %s.\n", strerror(errno));	
-			abort();
+			die("Failed to read from stdin: %s.", strerror(errno));	
 		} else {
 			return false;
 		}
@@ -281,8 +288,7 @@ produce(uint32_t indicies)
 
 	handle->q_buf[0] = tx_w + count;
 	if ( stlink_write_mem8(handle, addr + 0, 1) ) {
-		fprintf(stderr, "Failed to advance TX write index.\n");
-		abort();
+		die("Failed to advance TX write index.");
 	}
 
 	return true;
@@ -309,14 +315,13 @@ raw_mode_or_die(void)
 	}
 
 	if ( tcgetattr(STDIN_FILENO, orig) ) {
-		abort();
+		die("Failed to get TTY attributes.");
 	}
 	atexit(restore_stdin);
 	struct termios raw = *orig;
 	raw.c_lflag &= (unsigned)~(ECHO | ICANON);
 	if ( tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) ) {
-		fprintf(stderr, "Failed to put terminal into raw mode: %s.\n", strerror(errno));
-		abort();
+		die("Failed to put terminal into raw mode: %s.", strerror(errno));
 	}
 }
 
@@ -351,12 +356,10 @@ stdin_nonblock_or_die(void)
 	errno = 0;
 	int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
 	if ( errno ) {
-		fprintf(stderr, "Failed to get file descriptor status flags: %s.\n", strerror(errno));
-		abort();
+		die("Failed to get file descriptor status flags: %s.", strerror(errno));
 	}
 	if ( fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK) == -1 ) {
-		fprintf(stderr, "Failed to add O_NONBLOCK to file descriptor status flags: %s.\n", strerror(errno));
-		abort();
+		die("Failed to add O_NONBLOCK to file descriptor status flags: %s.", strerror(errno));
 	}
 }
 
@@ -377,7 +380,7 @@ get_time(void)
 // Calculates how much is free/used in each direction.
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-function"
-static void
+static void __attribute__((unused))
 debug_indicies(uint32_t indicies)
 {
 #pragma clang diagnostic pop
@@ -401,8 +404,7 @@ stdin_file_type_or_die(void)
 {
 	struct stat sb;
 	if ( fstat(STDIN_FILENO, &sb) ) {
-		fprintf(stderr, "Failed to fstat() stdin: %s.\n", strerror(errno));
-		abort();
+		die("Failed to fstat() stdin: %s.", strerror(errno));
 	}
 	const mode_t file_type = sb.st_mode & S_IFMT;
 	switch ( file_type ) {
@@ -413,16 +415,14 @@ stdin_file_type_or_die(void)
 		case S_IFCHR:
 			stdin_tty = isatty(STDIN_FILENO);
 			if ( !stdin_tty ) {
-				fprintf(stderr, "TTYs are the only supported kind of character device.\n");
-				abort();
+				die("TTYs are the only supported kind of character device.");
 			}
 			break;
 		case S_IFREG:
 			stdin_file = true;
 			break;
 		default:
-			fprintf(stderr, "unsupported file type: 0%o.\n", file_type );
-			break;
+			die("unsupported file type: 0%o.", file_type);
 	}
 }
 
@@ -434,9 +434,7 @@ handler_term(int sig)
 	quit = true;
 }
 
-// Register signal handlers for SIGINT and SIGTERM.
-// The signal handlers terminate the main loop.
-// Terminate the main loop by setting the quit flag.
+// Schedule the target to be reset.
 static void
 handler_int(int sig)
 {
@@ -484,17 +482,14 @@ main(int argc, const char *argv[])
 	// Halt the target to read the base address from R11.
 	if ( !addr ) {
 		if ( stlink_force_debug(handle) ) {
-			fprintf(stderr, "Failed to halt the target.\n");
-			abort();
+			die("Failed to halt the target.");
 		}
 		struct stlink_reg regs[1];
 		if ( stlink_read_reg(handle, 11, regs) ) {
-			fprintf(stderr, "Failed to registers.\n");
-			abort();
+			die("Failed to registers.");
 		}
 		if ( stlink_run(handle) ) {
-			fprintf(stderr, "Failed to resume the target.\n");
-			abort();
+			die("Failed to resume the target.");
 		}
 		addr = regs->r[11];
 	}
@@ -509,12 +504,10 @@ main(int argc, const char *argv[])
 
 		if ( reset ) {
 			if ( stlink_reset(handle) ) {
-				fprintf(stderr, "Failed to reset target.\n");
-				abort();
+				die("Failed to reset target.");
 			}
 			if ( stlink_run(handle) ) {
-				fprintf(stderr, "Failed to resume target.\n");
-				abort();
+				die("Failed to resume target.");
 			}
 			fprintf(stderr, "\nRESET\n");
 			reset = false;

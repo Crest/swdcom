@@ -1,7 +1,12 @@
-CC=gcc
+CSTD=c99
+WARN=-Wall -Wextra -Wno-unknown-pragmas
 
-CFLAGS+=-O0 -g
+CFLAGS?=-O2 -pipe
+CFLAGS+=-std=$(CSTD)
+CFLAGS+=$(WARN)
 CFLAGS+=-I/usr/local/include
+CFLAGS+=-I/usr/local/include/stlink
+CFLAGS+=-I/usr/include/libusb-1.0
 CFLAGS+=-L/usr/local/lib
 LDFLAGS+=-lstlink
 
