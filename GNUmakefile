@@ -7,6 +7,7 @@ CFLAGS+=$(WARN)
 CFLAGS+=-I/usr/local/include
 CFLAGS+=-I/usr/local/include/stlink
 CFLAGS+=-L/usr/local/lib
+CFLAGS+=$(shell pkg-config --cflags libusb-1.0)
 LDFLAGS+=-lstlink
 
 swd2: swd2.c
