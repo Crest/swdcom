@@ -39,9 +39,11 @@ static struct termios orig[1]; // original terminal settings
 
 static bool quit       = false; // Quit the main loop
 static bool reset      = false; // Reset the target
+static bool upload     = false; // Upload wanted
 static bool stdin_tty  = false; // Is stdin a TTY?
 static bool stdin_pipe = false; // Is stdin a pipe?
 static bool stdin_file = false; // Is stdin a regular file?
+static int  input      = STDIN_FILENO;
 
 // On TTYs ctrl+d results in a ASCII end of transmission control character.
 static const uint8_t ascii_eot = 0x04;
@@ -227,7 +229,7 @@ produce(uint32_t indicies)
 		return false;
 	}
 	
-	ssize_t result = read(STDIN_FILENO, buffer, tx_f);
+	ssize_t result = read(input, buffer, tx_f);
 	if ( result < 0 ) {
 		if ( errno != EINTR && errno != EAGAIN ) {
 			die("Failed to read from stdin: %s.", strerror(errno));	
@@ -237,6 +239,10 @@ produce(uint32_t indicies)
 	}
 	count = (uint8_t)result;
 	if ( !count ) {
+		if ( input != STDIN_FILENO ) {
+			close(input);
+			input = STDIN_FILENO;
+		}
 		quit = true;
 	}
 
@@ -443,6 +449,13 @@ handler_int(int sig)
 	reset = true;
 }
 
+static void
+handler_quit(int sig)
+{
+	(void)sig;
+	upload = true;
+}
+
 // Register signal handlers for SIGINT and SIGTERM.
 // The signal handlers terminate the main loop.
 static void
@@ -453,6 +466,8 @@ install_signal_handlers(void)
 	sigaction(SIGINT, action, NULL);
 	action->sa_handler = handler_term;
 	sigaction(SIGTERM, action, NULL);
+	action->sa_handler = handler_quit;
+	sigaction(SIGQUIT, action, NULL);
 }
 
 int
@@ -512,6 +527,15 @@ main(int argc, const char *argv[])
 			}
 			fprintf(stderr, "\nRESET\n");
 			reset = false;
+		}
+
+		if ( upload && input == STDIN_FILENO ) {
+			input = open("upload.fs", O_RDONLY);
+			if ( input < 0 ) {
+				fprintf(stderr, "*** Failed to open \"upload.fs\": %s. ***\n", strerror(errno));
+				input = STDIN_FILENO;
+			}
+			active = true;
 		}
 
 		// Reduce polling rate after a period of inactivty saving CPU cycles and power.
