@@ -45,7 +45,7 @@ static bool end_of_file = false; // Inject a end of medium?
 static bool stdin_tty   = false; // Is stdin a TTY?
 static bool stdin_pipe  = false; // Is stdin a pipe?
 static bool stdin_file  = false; // Is stdin a regular file?
-static int  input       = STDIN_FILENO;
+static int  fd          = STDIN_FILENO;
 static int  line_num    = -1;
 
 // On TTYs ctrl+d results in a ASCII end of transmission control character.
@@ -201,17 +201,17 @@ parse(uint8_t *reply, size_t len)
 					fprintf(stderr, "\n*** Failure in line %i. ***\n", line_num);
 					end_of_file = true;
 				}
-				if ( input != STDIN_FILENO ) {
-					close(input);
-					input = STDIN_FILENO;
+				if ( fd != STDIN_FILENO ) {
+					close(fd);
+					fd = STDIN_FILENO;
 				}
 				break;
 
 			// Allow the target to cancel uploads
 			case ascii_can:
-				if ( input != STDIN_FILENO ) {
-					close(input);
-					input = STDIN_FILENO;
+				if ( fd != STDIN_FILENO ) {
+					close(fd);
+					fd = STDIN_FILENO;
 				}
 				if ( line_num >= 0 ) {
 					end_of_file = true;
@@ -309,7 +309,7 @@ produce(uint32_t indicies)
 		count = strlen(helper);
 		end_of_file = false;
 	} else {
-		ssize_t result = read(input, buffer, tx_f);
+		ssize_t result = read(fd, buffer, tx_f);
 		if ( result < 0 ) {
 			if ( errno != EINTR && errno != EAGAIN ) {
 				die("Failed to read from stdin: %s.", strerror(errno));	
@@ -320,9 +320,9 @@ produce(uint32_t indicies)
 		count = (uint8_t)result;
 	}
 	if ( !count ) {
-		if ( input != STDIN_FILENO ) {
-			close(input);
-			input = STDIN_FILENO;
+		if ( fd != STDIN_FILENO ) {
+			close(fd);
+			fd = STDIN_FILENO;
 			end_of_file = true;
 		} else {
 			quit = true;
@@ -330,7 +330,7 @@ produce(uint32_t indicies)
 	}
 
 	// On TTYs EOF is signaled with a ASCII end of transmission control character.
-	if ( stdin_tty && input == STDIN_FILENO ) {
+	if ( stdin_tty && fd == STDIN_FILENO ) {
 		const uint8_t *eof = memchr(buffer, ascii_eot, count);
 		if ( eof ) {
 			count = (uint8_t)(eof - buffer);
@@ -612,11 +612,11 @@ main(int argc, const char *argv[])
 			reset = false;
 		}
 
-		if ( upload && input == STDIN_FILENO ) {
-			input = open("upload.fs", O_RDONLY);
-			if ( input < 0 ) {
+		if ( upload && fd == STDIN_FILENO ) {
+			fd = open("upload.fs", O_RDONLY);
+			if ( fd < 0 ) {
 				fprintf(stderr, "*** Failed to open \"upload.fs\": %s. ***\n", strerror(errno));
-				input = STDIN_FILENO;
+				fd = STDIN_FILENO;
 			}
 			new_file = true;
 			active = true;

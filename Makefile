@@ -1,5 +1,6 @@
 CSTD=c99
 WARN=-Wall -Wextra -Wno-unknown-pragmas
+WARN=-Weverything
 
 CFLAGS?=-O2 -pipe
 CFLAGS+=-std=$(CSTD)
