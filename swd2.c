@@ -37,16 +37,24 @@ static uint32_t addr = 0; // the base address of the ring buffers
 static stlink_t *handle = NULL; // handle to the ST/LINK V2
 static struct termios orig[1]; // original terminal settings
 
-static bool quit       = false; // Quit the main loop
-static bool reset      = false; // Reset the target
-static bool upload     = false; // Upload wanted
-static bool stdin_tty  = false; // Is stdin a TTY?
-static bool stdin_pipe = false; // Is stdin a pipe?
-static bool stdin_file = false; // Is stdin a regular file?
-static int  input      = STDIN_FILENO;
+static bool quit        = false; // Quit the main loop
+static bool reset       = false; // Reset the target
+static bool upload      = false; // Upload wanted
+static bool new_file    = false; // Inject a file seperator?
+static bool end_of_file = false; // Inject a end of medium?
+static bool stdin_tty   = false; // Is stdin a TTY?
+static bool stdin_pipe  = false; // Is stdin a pipe?
+static bool stdin_file  = false; // Is stdin a regular file?
+static int  input       = STDIN_FILENO;
+static int  line_num    = -1;
 
 // On TTYs ctrl+d results in a ASCII end of transmission control character.
 static const uint8_t ascii_eot = 0x04;
+static const uint8_t ascii_ack = 0x06;
+static const uint8_t ascii_nak = 0x15;
+static const uint8_t ascii_can = 0x18;
+static const uint8_t ascii_em  = 0x19;
+static const uint8_t ascii_fs  = 0x1c;
 
 static void
 __attribute__((noreturn))
@@ -91,7 +99,7 @@ open_or_die(void)
 }
 
 // Set the ring buffer base address.
-static void 
+static void
 set_addr_or_die(const char *hex_addr)
 {
 	errno = 0;
@@ -170,6 +178,59 @@ write32_or_die(uint32_t destination, const void *source, uint16_t length_in_byte
 	}
 }
 
+static void
+parse(uint8_t *reply, size_t len)
+{
+	for ( size_t i = 0; i < len; i++ ) {
+		switch ( reply[i] ) {
+			// Allow the target to disconnect from the host
+			case ascii_eot:
+				quit = true;
+				break;
+
+			// Send by QUIT after each line
+			case ascii_ack:
+				if ( line_num >= 0 ) {
+					line_num++;
+				}
+				break;
+
+			// Contained in all compiler errors
+			case ascii_nak:
+				if ( line_num >= 0 ) {
+					fprintf(stderr, "\n*** Failure in line %i. ***\n", line_num);
+					end_of_file = true;
+				}
+				if ( input != STDIN_FILENO ) {
+					close(input);
+					input = STDIN_FILENO;
+				}
+				break;
+
+			// Allow the target to cancel uploads
+			case ascii_can:
+				if ( input != STDIN_FILENO ) {
+					close(input);
+					input = STDIN_FILENO;
+				}
+				if ( line_num >= 0 ) {
+					end_of_file = true;
+				}
+				break;
+
+			// Use end of medium as end of file marker
+			case ascii_em:
+				line_num = -1;
+				break;
+
+			// Begin each new file with file seperator marker
+			case ascii_fs:
+				line_num = 0;
+				break;
+		}
+	}
+}
+
 // Consume everything enqueued by the microcontroller into the ringbuffers.
 // The ring buffers are single producer single writer queues.
 static bool
@@ -199,10 +260,12 @@ consume(uint32_t indicies)
 	if ( len0 ) {
 		stlink_read_mem32(handle, addr + 4 + 256 + start0, len0);
 		write_or_die(handle->q_buf + off, len);
+		parse(handle->q_buf + off, len);
 	}
 	if ( len1 ) {
 		stlink_read_mem32(handle, addr + 4 + 256 + start1, len1);
 		write_or_die(handle->q_buf, rx_u - len);
+		parse(handle->q_buf, rx_u - len);
 	}
 
 	handle->q_buf[0] = rx_w;
@@ -213,7 +276,7 @@ consume(uint32_t indicies)
 	return true;
 }
 
-// Attempt to read and enqueue as much input as possible from stdin to the microcontroller.
+// Attempt to read and enqueue as much input as possible to the microcontroller.
 // The ring buffers are single producer single writer queues.
 static bool
 produce(uint32_t indicies)
@@ -229,28 +292,49 @@ produce(uint32_t indicies)
 		return false;
 	}
 	
-	ssize_t result = read(input, buffer, tx_f);
-	if ( result < 0 ) {
-		if ( errno != EINTR && errno != EAGAIN ) {
-			die("Failed to read from stdin: %s.", strerror(errno));	
-		} else {
+	if ( new_file ) {
+
+		const char helper[] = "\x1c\n$1c emit\n";
+		if ( tx_f < strlen(helper) ) {
 			return false;
 		}
+		memcpy(buffer, helper, strlen(helper));
+		count = strlen(helper);
+		new_file = false;
+	} else if ( end_of_file ) {
+		const char helper[] = "\x19\n$19 emit\n";
+		if ( tx_f < strlen(helper) ) {
+			return false;
+		}
+		memcpy(buffer, helper, strlen(helper));
+		count = strlen(helper);
+		end_of_file = false;
+	} else {
+		ssize_t result = read(input, buffer, tx_f);
+		if ( result < 0 ) {
+			if ( errno != EINTR && errno != EAGAIN ) {
+				die("Failed to read from stdin: %s.", strerror(errno));	
+			} else {
+				return false;
+			}
+		}
+		count = (uint8_t)result;
 	}
-	count = (uint8_t)result;
 	if ( !count ) {
 		if ( input != STDIN_FILENO ) {
 			close(input);
 			input = STDIN_FILENO;
+			end_of_file = true;
+		} else {
+			quit = true;
 		}
-		quit = true;
 	}
 
 	// On TTYs EOF is signaled with a ASCII end of transmission control character.
-	if ( stdin_tty ) {
+	if ( stdin_tty && input == STDIN_FILENO ) {
 		const uint8_t *eof = memchr(buffer, ascii_eot, count);
 		if ( eof ) {
-			count = (uint8_t)(eof - buffer); 
+			count = (uint8_t)(eof - buffer);
 			quit = true;
 		}
 	}
@@ -308,7 +392,7 @@ restore_stdin(void)
 	tcsetattr(STDIN_FILENO, TCSAFLUSH, orig);
 }
 
-// Put the standard input into raw mode if it's a TTY. 
+// Put the standard input into raw mode if it's a TTY.
 // Restore stdin to its previous mode on exit.
 //
 // TTYs have to be but into raw mode because in canonical
@@ -343,9 +427,9 @@ elapsed(struct timespec start, struct timespec stop)
 		};
 		return result;
 	} else {
-        	struct timespec result = {
+		struct timespec result = {
 			.tv_sec  = stop.tv_sec  - start.tv_sec,
-        		.tv_nsec = stop.tv_nsec - start.tv_nsec
+			.tv_nsec = stop.tv_nsec - start.tv_nsec
 		};
 		return result;
 	}
@@ -535,7 +619,9 @@ main(int argc, const char *argv[])
 				fprintf(stderr, "*** Failed to open \"upload.fs\": %s. ***\n", strerror(errno));
 				input = STDIN_FILENO;
 			}
+			new_file = true;
 			active = true;
+			upload = false;
 		}
 
 		// Reduce polling rate after a period of inactivty saving CPU cycles and power.
