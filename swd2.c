@@ -293,7 +293,6 @@ produce(uint32_t indicies)
 	}
 	
 	if ( new_file ) {
-
 		const char helper[] = "\x1c\n$1c emit\n";
 		if ( tx_f < strlen(helper) ) {
 			return false;
