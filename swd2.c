@@ -1,5 +1,3 @@
-#define _XOPEN_SOURCE 500
-
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -49,12 +47,12 @@ static int  fd          = STDIN_FILENO;
 static int  line_num    = -1;
 
 // On TTYs ctrl+d results in a ASCII end of transmission control character.
-static const uint8_t ascii_eot = 0x04;
-static const uint8_t ascii_ack = 0x06;
-static const uint8_t ascii_nak = 0x15;
-static const uint8_t ascii_can = 0x18;
-static const uint8_t ascii_em  = 0x19;
-static const uint8_t ascii_fs  = 0x1c;
+#define ASCII_EOT (0x04)
+#define ASCII_ACK (0x06)
+#define ASCII_NAK (0x15)
+#define ASCII_CAN (0x18)
+#define ASCII_EM  (0x19)
+#define ASCII_FS  (0x1c)
 
 static void
 __attribute__((noreturn))
@@ -179,52 +177,54 @@ write32_or_die(uint32_t destination, const void *source, uint16_t length_in_byte
 }
 
 static void
+end_upload(void)
+{
+	if ( fd != STDIN_FILENO ) {
+		close(fd);
+		fd = STDIN_FILENO;
+	}
+	if ( line_num >= 0 ) {
+		end_of_file = true;
+	}
+}
+
+static void
 parse(uint8_t *reply, size_t len)
 {
 	for ( size_t i = 0; i < len; i++ ) {
 		switch ( reply[i] ) {
 			// Allow the target to disconnect from the host
-			case ascii_eot:
+			case ASCII_EOT:
 				quit = true;
 				break;
 
 			// Send by QUIT after each line
-			case ascii_ack:
+			case ASCII_ACK:
 				if ( line_num >= 0 ) {
 					line_num++;
 				}
 				break;
 
 			// Contained in all compiler errors
-			case ascii_nak:
+			case ASCII_NAK:
 				if ( line_num >= 0 ) {
 					fprintf(stderr, "\n*** Failure in line %i. ***\n", line_num);
-					end_of_file = true;
 				}
-				if ( fd != STDIN_FILENO ) {
-					close(fd);
-					fd = STDIN_FILENO;
-				}
+				end_upload();
 				break;
 
 			// Allow the target to cancel uploads
-			case ascii_can:
-				if ( fd != STDIN_FILENO ) {
-					close(fd);
-					fd = STDIN_FILENO;
-				}
-				if ( line_num >= 0 ) {
-					end_of_file = true;
-				}
+			case ASCII_CAN:
+				end_upload();
 				break;
 
 			// Use end of medium as end of file marker
-			case ascii_em:
+			case ASCII_EM:
 				line_num = -1;
 				break;
 
 			// Begin each new file with file seperator marker
-			case ascii_fs:
+			case ASCII_FS:
 				line_num = 0;
 				break;
 		}
@@ -321,9 +321,7 @@ produce(uint32_t indicies)
 	}
 	if ( !count ) {
 		if ( fd != STDIN_FILENO ) {
-			close(fd);
-			fd = STDIN_FILENO;
-			end_of_file = true;
+			end_upload();
 		} else {
 			quit = true;
 		}
@@ -331,7 +329,7 @@ produce(uint32_t indicies)
 
 	// On TTYs EOF is signaled with a ASCII end of transmission control character.
 	if ( stdin_tty && fd == STDIN_FILENO ) {
-		const uint8_t *eof = memchr(buffer, ascii_eot, count);
+		const uint8_t *eof = memchr(buffer, ASCII_EOT, count);
 		if ( eof ) {
 			count = (uint8_t)(eof - buffer);
 			quit = true;
