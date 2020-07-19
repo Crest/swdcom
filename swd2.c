@@ -83,11 +83,11 @@ close_handle(void)
 // Open the first ST/LINK V2 connected via USB
 // Register an atexit() handler to close it.
 static stlink_t *
-open_or_die(void)
+open_or_die(char serial[STLINK_SERIAL_MAX_SIZE])
 {
 	enum ugly_loglevel loglevel = UERROR;
 	bool want_reset = false;
-	handle = stlink_open_usb(loglevel, want_reset, NULL, STLINK_SWDCLK_4MHZ_DIVISOR);
+	handle = stlink_open_usb(loglevel, want_reset, serial, STLINK_SWDCLK_4MHZ_DIVISOR);
 	if ( !handle ) {
 		die("Failed to open the debugger.");
 	}
@@ -552,27 +552,32 @@ install_signal_handlers(void)
 }
 
 int
-main(int argc, const char *argv[])
+main(int argc, char *argv[])
 {
 	// We need to know the base address of the ring buffer pair
 	// on the target.
 	//
 	// Allow the user to skip automatic detection by providing the address.
+	char * serial = NULL;
 	switch ( argc ) {
 		case 1:
 			break;
 		case 2:
 			set_addr_or_die(argv[1]);
 			break;
+		case 3:
+			set_addr_or_die(argv[1]);
+			serial = argv[2];
+			break;
 		default:
-			fprintf(stderr, "usage: %s [<base-addr>]\n", argv[0]);
+			fprintf(stderr, "usage: %s [<base-addr> [<serial>]]\n", argv[0]);
 			return 64;
 	}
 
 	// Required setup code. Abort on all errors.
 	stdin_file_type_or_die();
 	install_signal_handlers();
-	open_or_die();
+	open_or_die(serial);
 	raw_mode_or_die();
 	stdin_nonblock_or_die();
 
