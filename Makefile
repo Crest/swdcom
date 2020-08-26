@@ -11,7 +11,7 @@ CFLAGS+=-L/usr/local/lib
 #CFLAGS+=-D_XOPEN_SOURCE=500
 LDFLAGS+=-lstlink
 
-all: swd2 swdd
+all: swd2 # swdd
 
 swd2: swd2.c
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
