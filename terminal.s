@@ -67,20 +67,25 @@
   Wortbirne Flag_visible, "swd"
 @ -----------------------------------------------------------------------------
    dup                @ In theory the rest could be written in forth
-   ldr tos, =SWD_Base @ with just knowledge of this constant, but
+   movs tos, r11      @ with just knowledge of this constant, but
    bx lr              @ it would require a two stage bootstrap.
 
 @ -----------------------------------------------------------------------------
   Wortbirne Flag_visible, "swd-init"
 @ -----------------------------------------------------------------------------
-uart_init:            @ Hijack the usart_init symbol to minimize code changes
-   ldr r1, =SWD_Base  @ SWD buffer base address
-   movs r0, 0         @ Initialize all four indices to zero.
+uart_init:                    @ Hijack the usart_init symbol to minimize code changes
+   push {lr}
+   ldr r0, =Dictionarypointer @ Assumes that the directory pointer points to a word aligned address in SRAM.
+   ldr r1, [r0]               @ Load the start of free space
+   movs r0, 0                 @ Initialize all four indices to zero.
    str r0, [r1]
-   mov r11, r1        @ Load the base address into R11. This makes the code
-                      @ slightly faster and allows the host PC to autodiscover
-                      @ the buffer address.
-   bx lr
+   movs r11, r1               @ Save the base address in R11. This makes the code
+                              @ slightly faster and allows the host PC to autodiscover
+                              @ the buffer address.
+   dup                        @ Allocate the required 4 + 2*256 bytes
+   pushdaconstw 516           @ Ignore failure. There is nothing we can do
+   bl allot                   @ to recover and there should always be at least
+   pop {pc}                   @ this much free SRAM on start up.
 
 @ -----------------------------------------------------------------------------
   Wortbirne Flag_visible, "swd-key?" @ ( -- ? )
