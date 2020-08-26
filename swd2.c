@@ -568,6 +568,8 @@ main(int argc, char *argv[])
 		case 3:
 			set_addr_or_die(argv[1]);
 			serial = argv[2];
+			printf("\033]2;swd2 : %s\007", serial);
+			fflush(stdout);
 			break;
 		default:
 			fprintf(stderr, "usage: %s [<base-addr> [<serial>]]\n", argv[0]);
