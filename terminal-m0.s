@@ -67,7 +67,7 @@
   Wortbirne Flag_visible, "swd"
 @ -----------------------------------------------------------------------------
    dup                @ In theory the rest could be written in forth
-   movs tos, r11      @ with just knowledge of this constant, but
+   mov tos, r11       @ with just knowledge of this constant, but
    bx lr              @ it would require a two stage bootstrap.
 
 @ -----------------------------------------------------------------------------
@@ -79,7 +79,7 @@ uart_init:                    @ Hijack the usart_init symbol to minimize code ch
    ldr r1, [r0]               @ Load the start of free space
    movs r0, 0                 @ Initialize all four indices to zero.
    str r0, [r1]
-   movs r11, r1               @ Save the base address in R11. This makes the code
+   mov r11, r1               @ Save the base address in R11. This makes the code
                               @ slightly faster and allows the host PC to autodiscover
                               @ the buffer address.
    dup                        @ Allocate the required 4 + 2*256 bytes
@@ -101,10 +101,10 @@ serial_qkey:         @ Hijack the serial_qkey symbol to minimize code changes
 
    movs tos, 0       @ Assume that the RX buffer is empty (read == write)
    cmp r0, r1        @ Test the assumption
-   it ne             @ Change from 0 to -1 if the assumption was incorrect 
-   subne tos, 1
+   beq 1f            @ Change from 0 to -1 if the assumption was incorrect 
+   subs tos, 1
 
-   pop {pc}
+1: pop {pc}
 
 @ -----------------------------------------------------------------------------
   Wortbirne Flag_visible, "swd-emit?" @ ( -- ? )
@@ -121,10 +121,10 @@ serial_qemit:        @ Hijack the serial_qemit symbol to minimize code changes
    uxtb r0, r0       @ clear possible carry
    movs tos, 0       @ Assume that the TX buffer is full (write + 1 == RX)
    cmp r0, r1        @ Test the assumption
-   it ne             @ Change from 0 to -1 if the assumption was incorrect
-   subne tos, 1
+   beq 1f            @ Change from 0 to -1 if the assumption was incorrect
+   subs tos, 1
 
-   pop {pc}
+1: pop {pc}
 
 @ -----------------------------------------------------------------------------
   Wortbirne Flag_visible, "swd-key" @ ( -- c )
@@ -158,7 +158,8 @@ serial_emit:           @ Hijack the serial_emit symbol to minimize code changes
    cmp r1, r2          @ Wait while TX write + 1 == TX read
    beq 1b
 
-   add r0, 256+4       @ Store the next byte at R11 + 4 + 256 + TX write
+   adds r0, r0, 255    @ Store the next byte at R11 + 4 + 256 + TX write
+   adds r0, r0, 5
    strb tos, [r0, r3]
 
    strb r1, [r3, 2]
