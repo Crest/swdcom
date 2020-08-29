@@ -14,6 +14,7 @@ LDFLAGS+=stlink/build/Release/lib/libstlink.a -lusb
 all: swd2 # swdd
 
 stlink/build/Release/lib/libstlink.a:
+	[ -d stlink/.git ] || git submodule update --init
 	make -C stlink
 
 swd2: swd2.c stlink/build/Release/lib/libstlink.a
