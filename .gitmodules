@@ -1,0 +1,3 @@
+[submodule "stlink"]
+	path = stlink
+	url = https://github.com/Crest/stlink.git
