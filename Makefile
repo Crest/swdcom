@@ -5,15 +5,18 @@ WARN=-Weverything
 CFLAGS?=-O2 -pipe
 CFLAGS+=-std=$(CSTD)
 CFLAGS+=$(WARN)
-CFLAGS+=-I/usr/local/include
-CFLAGS+=-I/usr/local/include/stlink
-CFLAGS+=-L/usr/local/lib
+CFLAGS+=-Istlink/inc
+CFLAGS+=-Istlink/build/Release/inc
+CFLAGS+=-Istlink/src/stlink-lib
 #CFLAGS+=-D_XOPEN_SOURCE=500
-LDFLAGS+=-lstlink
+LDFLAGS+=stlink/build/Release/lib/libstlink.a -lusb
 
 all: swd2 # swdd
 
-swd2: swd2.c
+stlink/build/Release/lib/libstlink.a:
+	make -C stlink
+
+swd2: swd2.c stlink/build/Release/lib/libstlink.a
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
 
 swdd: swdd.c
@@ -23,3 +26,4 @@ swdd: swdd.c
 .PHONY: clean
 clean:
 	rm -f swd2 swdd
+	make -C stlink clean
