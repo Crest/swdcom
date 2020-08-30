@@ -62,3 +62,6 @@ swd2
 
 # Upload file
 upload.fs
+
+# Ingore ctags
+tags
