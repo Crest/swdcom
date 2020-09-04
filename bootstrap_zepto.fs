@@ -3,9 +3,11 @@ compile-to-flash
 forth-wordlist 1 set-order
 forth-wordlist set-current
 wordlist constant swd-wordlist
+wordlist constant swd-internal-wordlist
 
-forth-wordlist int-io-internal-wordlist swd-wordlist 3 set-order
-swd-wordlist set-current
+forth-wordlist int-io-internal-wordlist swd-internal-wordlist swd-wordlist
+4 set-order
+swd-internal-wordlist set-current
 
 here 256 2* cell+ buffer: swd
 swd 0 + constant swd-rx-w
@@ -36,6 +38,8 @@ variable use-sleep
 : >r11 ( x -- ) [ $46b3 h, ] drop ; \ $46b3 = mov r11, r6
 : swd-init ( -- ) true use-sleep ! 0 swd ! swd >r11  ;
 
+swd-wordlist set-current
+
 : swd-console ( -- )
   ['] swd-key? key?-hook !
   ['] swd-key key-hook !
@@ -62,5 +66,7 @@ forth-wordlist set-current
   swd-console
 ;
 
-warm
+compile-to-ram
+
+\ warm
 
