@@ -9,7 +9,7 @@ CFLAGS+=-Istlink/build/Release/inc
 CFLAGS+=-Istlink/src/stlink-lib
 CFLAGS+=-D_XOPEN_SOURCE=500
 CFLAGS+=$(shell pkg-config --cflags libusb-1.0)
-LDFLAGS+=stlink/build/Release/lib/libstlink.a -lusb
+LDFLAGS+=stlink/build/Release/lib/libstlink.a $(shell pkg-config --libs libusb-1.0)
 
 all: swd2
 
