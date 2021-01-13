@@ -628,7 +628,7 @@ main(int argc, char *argv[])
 			upload = false;
 		}
 
-		// Reduce polling rate after a period of inactivty saving CPU cycles and power.
+		// Reduce polling rate after a period of inactivity saving CPU cycles and power.
 		if ( active ) {
 			last_active = now;
 		} else {
