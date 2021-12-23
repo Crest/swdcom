@@ -92,6 +92,7 @@ open_or_die(char serial[STLINK_SERIAL_BUFFER_SIZE])
 		die("Failed to open the debugger.");
 	}
 	atexit(close_handle);
+    stlink_set_swdclk(handle, 24000); // Run STLINK/V3 @ 24MHz
 
 	return handle;
 }
