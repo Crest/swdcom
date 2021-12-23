@@ -83,7 +83,7 @@ close_handle(void)
 // Open the first ST/LINK V2 connected via USB
 // Register an atexit() handler to close it.
 static stlink_t *
-open_or_die(char serial[STLINK_SERIAL_MAX_SIZE])
+open_or_die(char serial[STLINK_SERIAL_BUFFER_SIZE])
 {
 	enum ugly_loglevel loglevel = UERROR;
 	bool want_reset = false;
@@ -592,7 +592,7 @@ main(int argc, char *argv[])
 		if ( stlink_read_reg(handle, 11, regs) ) {
 			die("Failed to registers.");
 		}
-		if ( stlink_run(handle) ) {
+		if ( stlink_run(handle, RUN_NORMAL) ) {
 			die("Failed to resume the target.");
 		}
 		addr = regs->r[11];
@@ -607,10 +607,10 @@ main(int argc, char *argv[])
 		struct timespec now = get_time();
 
 		if ( reset ) {
-			if ( stlink_reset(handle) ) {
+			if ( stlink_reset(handle, RESET_HARD) ) {
 				die("Failed to reset target.");
 			}
-			if ( stlink_run(handle) ) {
+			if ( stlink_run(handle, RUN_NORMAL) ) {
 				die("Failed to resume target.");
 			}
 			fprintf(stderr, "\nRESET\n");
