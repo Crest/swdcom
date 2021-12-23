@@ -298,7 +298,7 @@ produce(uint32_t indicies)
 			return false;
 		}
 		memcpy(buffer, helper, strlen(helper));
-		count = strlen(helper);
+		count = (uint8_t)strlen(helper);
 		new_file = false;
 	} else if ( end_of_file ) {
 		const char helper[] = "\x19\n$19 emit\n";
@@ -306,7 +306,7 @@ produce(uint32_t indicies)
 			return false;
 		}
 		memcpy(buffer, helper, strlen(helper));
-		count = strlen(helper);
+		count = (uint8_t)strlen(helper);
 		end_of_file = false;
 	} else {
 		ssize_t result = read(fd, buffer, tx_f);
