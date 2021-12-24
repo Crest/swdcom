@@ -1,3 +1,6 @@
+USB_CFLAGS!=pkg-config --cflags libusb-1.0
+USB_LDFLAGS!=pkg-config --libs libusb-1.0
+
 CSTD=c99
 WARN=-Wall -Wextra -Wno-unknown-pragmas
 WARN=-Weverything
@@ -8,8 +11,10 @@ CFLAGS+=$(WARN)
 CFLAGS+=-Istlink/inc
 CFLAGS+=-Istlink/build/Release/inc
 CFLAGS+=-Istlink/src/stlink-lib
-#CFLAGS+=-D_XOPEN_SOURCE=500
-LDFLAGS+=stlink/build/Release/lib/libstlink.a -lusb
+CFLAGS+=$(USB_CFLAGS)
+
+LDFLAGS+=stlink/build/Release/lib/libstlink.a
+LDFLAGS+=$(USB_LDFLAGS)
 
 all: swd2 # swdd
 
